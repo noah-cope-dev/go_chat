@@ -1,0 +1,275 @@
+I wanted to take a second to write this out so you can understand how I
+design things.
+
+    Key things to note:
+    1. In my head I have two people talking when I listen to a customer request.
+       * The Questioner:
+       this is the "why" part of the conversation.
+
+       I want to understand the problem space (the why, the constraints
+       and the values)
+
+
+        what are you trying to solve?
+        who will be using it?
+        where does our information come from?
+        do you need to store stuff?
+        how fast does this need to be?
+
+
+       what makes being solo on development hard is you often have to be the customer of your own product,
+       as developers. we are super interested in building the thing but not creating the thing to be built
+       this may be my projection. but it exists nonetheless.
+
+
+
+
+       The Designer
+       I want to translate the problem space into solution space (technical model, keywords to decide interface struct behavior)
+
+       so let's take a moment and use your example.
+
+       you said to me, "I wanted to make a client and server communicate to each other via tcp. but the client and server are on separate instances"
+
+
+       Nouns (these are your class or struct)
+       Client
+       Server
+       TCP
+
+       Verb(Actions)
+       Communicate
+
+       Adjective(required qualities)
+       Server and Client are different instances
+
+       my first step is to say
+
+       First Step
+       Client:
+       What is a client? ( these are your properties)
+       What does it need to know upon first launch(this is your constructor we use this to get it ready)
+       What behaviours can it do(methods)
+
+       so let's map that
+
+       a client is the user-facing portion that communication to the server
+
+       1. Clients are unique to there user.
+       type Client Struct {
+       Name String
+       }
+       // This is if i need to set it somewhere else(like a api)
+       func(c *Client) SetUser(name string) *Client{
+            return &Client{
+                Name:name
+            }
+       }
+       c.SetUser("Tom")
+
+        this lets us do it inside of a constructor
+       func(c *Clients) SetUser(name string) string {
+            return c.Name
+       }
+       // I need to get this name somewhere
+       func(c *Client) GetUser(name string) string {
+             return c.Name
+       }
+
+
+       1A lets create another. will we have multiple clients?
+       type Clients struct {
+        Clients []Client
+       }
+
+       // lets setup a bunch of clients on start pu
+         func(c *Clients) RegisterUsers(count int) {
+         c.Clients = make([]Client, count)
+           for i := range c.Clients {
+            c.Clients[i] = Client{
+              Name: fmt.Sprintf("Client ID %d", i),
+        }
+    }
+}
+
+       func(c *Clients) SetUser(name string) *Client{
+            return &Client{
+                Name:name
+            }
+       }
+       c.SetUser("Tom")
+
+
+       by taking just one quick second to identify one small part of our noun
+       we have opened up so much opportunity and the moment we want to add something new we can just add another field
+
+       we start mapping out these nouns and start unmasking the fog of war
+
+       it not this super abstract thing like java made it. its a way to quickly take your keywords and start making structure while solving the problem
+
+       Understanding the problem space helps us better make our nouns and verbs more accurate to reality
+       there is no shame in learning about the problem. our job is to not recreate TCP but rather understand how TCP works and add upon it
+       this is indication that we must take time and learn the problem space before we can accurately understand the programming space.
+
+       in golang the beauty of what we are given is we focus on the noun describe its properties and derive its behavior
+
+       lets get to the behavior
+
+       this is interfaces and its beauty
+
+        lets talk about that Protocol
+
+        // this is the behavior
+        type Protocol interface {
+        Decode([]byte) error
+        Encode([]byte) error
+        }
+
+        type Client(c *Client) struct {
+            Name string
+        }
+
+        // lets implement it
+        func (c *Client) Encode() ([]byte, error) {
+            // Client encodes its data to send
+            return []byte(c.Name), nil
+        }
+
+        func (c *Client) Decode(data []byte) error {
+        // Client decodes received data
+            c.Name = string(data)
+            return nil
+        }
+
+        type Server struct {
+             Port int
+        }
+
+
+        func (s *Server) Encode() ([]byte, error) {
+            // Server encodes its data to send
+            return []byte(fmt.Sprintf("%d", s.Port)), nil
+        }
+
+        func (s *Server) Decode(data []byte) error {
+            // Server decodes received data
+            port, _ := strconv.Atoi(string(data))
+            s.Port = port
+            return nil
+        }
+
+        watch this magic
+
+        // look at this basically generic function
+        func SendOverTCP(conn net.Conn, p Protocol) error {
+                data, err := p.Encode // works for client of the server
+                if err != nil {
+                    return err
+                }
+                _,err conn.Write(data)
+                return err
+        }
+        func ReceiveFromTCP(conn net.Conn, p Protocol) error {
+        buffer := make([]byte, 1024)
+        n, err := conn.Read(buffer)
+        if err != nil {
+            return err
+        }
+        return p.Decode(buffer[:n])  // Works for Client OR Server
+    }
+
+    great noah we have this but how do i use this now?
+
+
+    what this
+
+    // are two structs are made
+    client := &Client{Name: "Tom"}
+    server := &Server{Port:8080}
+
+    SendOverTcp(conn,client
+    SendOverTcp(conn,server)
+
+
+    ReceiveFromTcp(conn,client
+    ReceiveFromTcp(conn,server)
+
+
+    cool but C# can do that
+    let me show you what go can do.
+
+    implict interfaces: I only need to meet a interface on one contract
+
+     const (
+        CodeLoginRequest byte = 0x01
+	    CodeChatMessage  byte = 0x02
+     )
+
+     // Contract that call protocols must follow
+     type Message interface {
+        Encode() ([]byte, error)
+        Decode([]byte) error
+        GetProtocolCode() byte
+        }
+
+        type LoginRequest struct {
+        Username string
+        Password string
+        }
+        type LoginRequest struct {
+            Username string
+            Password string
+        }
+        i
+        func (l *LoginRequest) GetProtocolCode() byte {
+            return 0x01
+        }
+
+        func (l *LoginRequest) Encode() ([]byte, error) {
+            return []byte(l.Username + ":" + l.Password), nil
+        }
+
+        type ChatMessage struct {
+            From string
+            Text string
+        }
+
+        func (c *ChatMessage) GetProtocolCode() byte {
+            return 0x02
+        }
+
+        func (c *ChatMessage) Encode() ([]byte, error) {
+            return []byte(c.From + ": " + c.Text), nil
+        }
+
+        our structs have fullfilled 2/3 of the interfaces
+        in C# this would not work
+
+        but watch we use the GetProtocol and the Encode to solve a problem
+        even though there wasnt a decode
+        func SendMessage(conn net.Conn, msg Message) error {
+            code := msg.GetProtocolCode()
+            data, err := msg.Encode()
+            if err != nil {
+                return err
+            }
+
+            // [protocol code byte][encoded data]
+            packet := append([]byte{code}, data...)
+            _, err = conn.Write(packet)
+            return err
+            }
+
+        so figure out your nouns verbs adjectives and you can map out alot
+        of your code simply
+
+
+
+
+
+
+
+
+
+
+
